@@ -1,105 +1,148 @@
-*Looking for a shareable component template? Go here --> [sveltejs/component-template](https://github.com/sveltejs/component-template)*
+# Building Web Components using Svelte
 
----
+So... I own a few 3D Printers, one of which is hooked up to a Raspberry PI Zero running [Octoprint](https://github.com/OctoPrint/OctoPrint).
 
-# svelte app
+I also run the open-source home automation platform [Home Assistant](https://www.home-assistant.io/) on a Raspberry PI 4 to control and automate all the smart sensors and lighting etc. in my house.
 
-This is a project template for [Svelte](https://svelte.dev) apps. It lives at https://github.com/sveltejs/template.
+In this post, I will go through how I created a custom UI element for Home Assistant that transform my 3D Printer dashboard as shown below!
 
-To create a new project based on this template using [degit](https://github.com/Rich-Harris/degit):
+| Before      | After                                                                                                                   |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------- |
+| ![image (9)](https://user-images.githubusercontent.com/8472619/114595424-aad05080-9c8e-11eb-9f25-455ed8be0def.png) | ![Octoprint card](https://user-images.githubusercontent.com/8472619/114276747-50ce5180-9a28-11eb-99d5-2f921a8aba67.png) |
 
-```bash
-npx degit sveltejs/template svelte-app
-cd svelte-app
+The code for my Home Assistant component is available on GitHub: https://github.com/kasperlaursen/octoprint-card
+
+And the code for this tutorial can also be found on GitHub: https://github.com/kasperlaursen/Building-Web-Components-using-Svelte
+
+If you're using [Visual Studio Code](https://code.visualstudio.com/) it's recommend installing the official extension [Svelte for VS Code](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+
+Let's just get into it, no one wants to read a multi-page introduction 😀
+
+### Project Setup
+
+To get started we need to generate a new Svelte project:
+
+```
+npx degit sveltejs/template my-svelte-project
 ```
 
-*Note that you will need to have [Node.js](https://nodejs.org) installed.*
+Go to the folder this creates:
 
-
-## Get started
-
-Install the dependencies...
-
-```bash
-cd svelte-app
-npm install
+```
+cd my-svelte-project
 ```
 
-...then start [Rollup](https://rollupjs.org):
+Let's enable Typescript:
 
-```bash
-npm run dev
 ```
-
-Navigate to [localhost:5000](http://localhost:5000). You should see your app running. Edit a component file in `src`, save it, and reload the page to see your changes.
-
-By default, the server will only respond to requests from localhost. To allow connections from other computers, edit the `sirv` commands in package.json to include the option `--host 0.0.0.0`.
-
-If you're using [Visual Studio Code](https://code.visualstudio.com/) we recommend installing the official extension [Svelte for VS Code](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode). If you are using other editors you may need to install a plugin in order to get syntax highlighting and intellisense.
-
-## Building and running in production mode
-
-To create an optimised version of the app:
-
-```bash
-npm run build
-```
-
-You can run the newly built app with `npm run start`. This uses [sirv](https://github.com/lukeed/sirv), which is included in your package.json's `dependencies` so that the app will work when you deploy to platforms like [Heroku](https://heroku.com).
-
-
-## Single-page app mode
-
-By default, sirv will only respond to requests that match files in `public`. This is to maximise compatibility with static fileservers, allowing you to deploy your app anywhere.
-
-If you're building a single-page app (SPA) with multiple routes, sirv needs to be able to respond to requests for *any* path. You can make it so by editing the `"start"` command in package.json:
-
-```js
-"start": "sirv public --single"
-```
-
-## Using TypeScript
-
-This template comes with a script to set up a TypeScript development environment, you can run it immediately after cloning the template with:
-
-```bash
 node scripts/setupTypeScript.js
 ```
 
-Or remove the script via:
+Install dependencies and run the local dev server:
 
-```bash
-rm scripts/setupTypeScript.js
+```
+npm install
+npm run dev
 ```
 
-## Deploying to the web
+### Compiling to a Web Component
 
-### With [Vercel](https://vercel.com)
+Now let's compile the code to a Web Component rather than a full website!  
+First, off we need to add the `svelte:options` tag to the top of our `App.svelte` component:
 
-Install `vercel` if you haven't already:
-
-```bash
-npm install -g vercel
+```
+<svelte:options tag="my-web-component" />
 ```
 
-Then, from within your project folder:
+Then we need to let the svelte compiler know that we want to create web components.  
+Go to `rollup.config.js` and add the line `customElement: true,` as shown below:
 
-```bash
-cd public
-vercel deploy --name my-project
+```diffs
+svelte({
+ preprocess: sveltePreprocess({ sourceMap: !production }),
+ compilerOptions: {
+ // enable run-time checks when not in production
+ dev: !production,
+ customElement: true,
+ },
+}),
+
 ```
 
-### With [surge](https://surge.sh/)
+While we are in the rollup file, let's have svelte compile the CSS to the main bundle.js instead of a separate CSS file.  
+This is done by removing the following code from the rollup file;
 
-Install `surge` if you haven't already:
+```
+import css from "rollup-plugin-css-only";
 
-```bash
-npm install -g surge
+....
+
+// we'll extract any component CSS out into
+// a separate file - better for performance
+css({ output: "bundle.css" }),
+
 ```
 
-Then, from within your project folder:
+At this point, Svelte is already creating a Web Component/Custom Element for us, but we are still rendering the component to the body element using svelte.
 
-```bash
-npm run build
-surge public my-project.surge.sh
+Go to the `main.ts` file and let's stop svelte from rendering the component, by removing the following code:
+
 ```
+const app = new App({
+ target: document.body,
+ props: {
+ name: 'world'
+ }
+});
+
+export default app;
+```
+
+If you do **not** plan to integrate your web component with Home Assistant, you can simply delete `main.ts` and make the following change in `rollup.config.js`:
+
+```
+export default {
+ // input: "src/main.ts",
+ input: "src/App.svelte",
+ output: {
+```
+
+Now your local dev server should show a blank page.  
+So let's add the Web Component to the page.  
+Go to `public/index.html` and update the file to look like below:
+
+```
+<!DOCTYPE html>
+<html lang="en">
+ <head>
+ <meta charset="utf-8" />
+ <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+ <title>Svelte app</title>
+
+ <link rel="icon" type="image/png" href="/favicon.png" />
+ <link rel="stylesheet" href="/global.css" />
+
+ <script defer src="/build/bundle.js"></script>
+ </head>
+
+ <body>
+ <my-web-component />
+ </body>
+</html>
+
+```
+
+After Reloading your page you should now see `HELLO UNDEFINED!` on your page.  
+To pass the name prop to your component simply add the property to the custom element in your index.html file as below:
+
+```
+<my-web-component name="world" />
+```
+
+So... This was the basics of generating a Web Component/Custom Element with Svelte. You can now add your bundle.js to any HTML page and the component will be available as an HTML custom element.
+
+The next post will focus on integration with Home Assistant, and when available the link will be found {{Here}}!
+
+The code for this project is available on GitHub: https://github.com/kasperlaursen/Building-Web-Components-using-Svelte  
+Where there can be a commit for each section (header) on these posts!
